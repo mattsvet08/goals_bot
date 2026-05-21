@@ -1,0 +1,5 @@
+node_modules/
+.env
+goals.db
+goals.db-shm
+goals.db-wal

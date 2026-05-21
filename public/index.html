@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Цели дня</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --bg:       var(--tg-theme-secondary-bg-color, #f0f2f5);
+  --card:     var(--tg-theme-bg-color, #ffffff);
+  --text:     var(--tg-theme-text-color, #111827);
+  --hint:     var(--tg-theme-hint-color, #6b7280);
+  --accent:   var(--tg-theme-button-color, #6366f1);
+  --btn-text: var(--tg-theme-button-text-color, #ffffff);
+  --border:   rgba(0,0,0,0.07);
+
+  --red:    #ef4444;
+  --orange: #f97316;
+  --green:  #22c55e;
+  --nav-h:  64px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* ── Screens ─────────────────────────────── */
+.screen {
+  display: none;
+  flex-direction: column;
+  height: calc(100vh - var(--nav-h));
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+.screen.active { display: flex; }
+
+/* ── Header ──────────────────────────────── */
+.header {
+  background: var(--card);
+  padding: 14px 16px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+}
+
+.date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.nav-arrow {
+  background: var(--bg);
+  border: none;
+  border-radius: 10px;
+  width: 36px; height: 36px;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.nav-arrow:active { background: #d1d5db; }
+.nav-arrow:disabled { opacity: 0.3; pointer-events: none; }
+
+.date-center { text-align: center; }
+.date-main { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.date-sub  { font-size: 12px; color: var(--hint); margin-top: 1px; }
+
+.progress-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; font-size: 13px;
+}
+.progress-label { color: var(--hint); }
+.progress-nums  { font-weight: 700; font-size: 14px; }
+
+.progress-track {
+  height: 6px; background: var(--bg);
+  border-radius: 99px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a78bfa);
+  border-radius: 99px;
+  transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── Goals list ──────────────────────────── */
+.goals-wrap { flex: 1; padding: 12px 12px 0; display: flex; flex-direction: column; gap: 8px; }
+
+.section-label {
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--hint); padding: 8px 4px 2px;
+}
+
+/* ── Goal card ───────────────────────────── */
+.goal-card {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 13px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  border-left: 4px solid transparent;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: opacity 0.25s, box-shadow 0.2s;
+  position: relative;
+}
+.goal-card:active { box-shadow: 0 0 0 rgba(0,0,0,0); }
+.goal-card.done { opacity: 0.48; }
+.goal-card.p-высокий { border-left-color: var(--red); }
+.goal-card.p-средний  { border-left-color: var(--orange); }
+.goal-card.p-низкий   { border-left-color: var(--green); }
+
+/* Checkbox */
+.cb {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2.5px solid #d1d5db;
+  flex-shrink: 0;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s cubic-bezier(0.175,0.885,0.32,1.275);
+  margin-top: 1px;
+}
+.cb.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.08);
+}
+.cb svg { opacity: 0; transform: scale(0.5); transition: all 0.15s ease; }
+.cb.checked svg { opacity: 1; transform: scale(1); }
+
+.goal-body { flex: 1; min-width: 0; }
+
+.goal-task {
+  font-size: 15px; font-weight: 500;
+  line-height: 1.4;
+  transition: all 0.2s;
+}
+.goal-task.done {
+  text-decoration: line-through;
+  color: var(--hint);
+}
+
+.goal-meta {
+  display: flex; align-items: center;
+  gap: 6px; margin-top: 5px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 11px; font-weight: 600;
+  padding: 2px 7px; border-radius: 6px;
+  white-space: nowrap;
+}
+.b-time    { background: #eef2ff; color: #4f46e5; }
+.b-mat     { background: #eff6ff; color: #2563eb; }
+.b-fiz     { background: #f5f3ff; color: #7c3aed; }
+.b-inf     { background: #ecfeff; color: #0e7490; }
+.b-rus     { background: #fdf2f8; color: #c026d3; }
+.b-other   { background: #f3f4f6; color: #6b7280; }
+
+.prio-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-left: auto;
+}
+.pd-высокий { background: var(--red); }
+.pd-средний  { background: var(--orange); }
+.pd-низкий   { background: var(--green); }
+
+.carried-tag {
+  font-size: 10px; color: var(--hint);
+  margin-top: 3px;
+}
+
+.del-btn {
+  background: none; border: none;
+  color: #d1d5db; cursor: pointer;
+  font-size: 16px; padding: 3px 4px;
+  border-radius: 6px; flex-shrink: 0;
+  transition: color 0.15s;
+  line-height: 1;
+}
+.del-btn:active { color: var(--red); }
+
+/* ── Empty state ─────────────────────────── */
+.empty {
+  flex: 1; display: flex;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--hint);
+  gap: 10px;
+}
+.empty-icon { font-size: 52px; }
+.empty p { font-size: 15px; line-height: 1.6; }
+
+/* ── FAB ─────────────────────────────────── */
+.fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(var(--nav-h) + 14px);
+  width: 54px; height: 54px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--btn-text);
+  border: none; cursor: pointer;
+  font-size: 26px; font-weight: 300;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.45);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+  z-index: 20;
+}
+.fab:active { transform: scale(0.93); box-shadow: 0 2px 8px rgba(99,102,241,0.3); }
+
+/* ── Bottom nav ──────────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: var(--nav-h);
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 30;
+}
+
+.tab {
+  flex: 1; border: none; background: none;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 4px; cursor: pointer;
+  color: var(--hint);
+  font-size: 11px; font-weight: 600;
+  transition: color 0.15s;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.tab.active { color: var(--accent); }
+.tab svg { width: 24px; height: 24px; stroke-width: 1.8; }
+
+/* ── History screen ──────────────────────── */
+.hist-header {
+  background: var(--card);
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.hist-header h2 { font-size: 20px; font-weight: 700; }
+
+.hist-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.hist-card {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.hist-card:active { box-shadow: none; }
+
+.hist-top {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.hist-date { font-size: 15px; font-weight: 600; }
+.hist-count { font-size: 13px; color: var(--hint); }
+.hist-pct   { font-size: 15px; font-weight: 700; color: var(--accent); }
+
+.hist-bar { height: 5px; background: var(--bg); border-radius: 99px; overflow: hidden; }
+.hist-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), #a78bfa);
+}
+.hist-fill.full { background: var(--green); }
+
+/* ── Modal ───────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex; align-items: flex-end;
+  transition: opacity 0.2s;
+}
+.overlay.hidden { display: none; }
+
+.modal {
+  background: var(--card);
+  border-radius: 22px 22px 0 0;
+  padding: 24px 20px 32px;
+  width: 100%;
+  animation: slideUp 0.25s cubic-bezier(0.32,0.72,0,1);
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.modal-handle {
+  width: 36px; height: 4px;
+  background: #d1d5db; border-radius: 99px;
+  margin: 0 auto 20px;
+}
+
+.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+
+.hint-box {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 12px; color: var(--hint);
+  margin-bottom: 14px; line-height: 1.7;
+}
+.hint-box code {
+  background: rgba(0,0,0,0.07);
+  padding: 1px 5px; border-radius: 4px;
+  font-family: 'SF Mono', 'Courier New', monospace;
+  font-size: 11.5px; color: var(--text);
+}
+
+.modal textarea {
+  width: 100%; height: 180px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px; padding: 12px;
+  font-size: 13px; font-family: 'SF Mono', 'Courier New', monospace;
+  background: var(--bg); color: var(--text);
+  resize: none; outline: none;
+  line-height: 1.7;
+  transition: border-color 0.15s;
+}
+.modal textarea:focus { border-color: var(--accent); }
+
+.modal-btns { display: flex; gap: 10px; margin-top: 14px; }
+
+.btn {
+  flex: 1; border: none; border-radius: 12px;
+  padding: 13px; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-main {
+  background: var(--accent); color: var(--btn-text);
+}
+.btn-main:active { opacity: 0.85; }
+.btn-sec {
+  background: var(--bg); color: var(--hint);
+}
+.btn-sec:active { opacity: 0.7; }
+
+/* ── Carry toast ─────────────────────────── */
+.carry-toast {
+  position: fixed;
+  bottom: calc(var(--nav-h) + 10px);
+  left: 80px; right: 80px;
+  background: #1f2937;
+  color: white;
+  border-radius: 99px;
+  font-size: 13px; font-weight: 600;
+  padding: 10px 16px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  z-index: 19;
+  transition: opacity 0.3s, transform 0.3s;
+}
+.carry-toast.hidden { opacity: 0; transform: translateY(10px); pointer-events: none; }
+</style>
+</head>
+<body>
+
+<!-- ── Goals screen ─────────────────────── -->
+<div id="scGoals" class="screen active">
+  <div class="header">
+    <div class="date-row">
+      <button class="nav-arrow" id="prevDay">&#8592;</button>
+      <div class="date-center">
+        <div class="date-main" id="dateMain"></div>
+        <div class="date-sub"  id="dateSub"></div>
+      </div>
+      <button class="nav-arrow" id="nextDay">&#8594;</button>
+    </div>
+    <div class="progress-row">
+      <span class="progress-label">Прогресс</span>
+      <span class="progress-nums" id="progressNums">0 / 0</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="goals-wrap" id="goalsWrap"></div>
+
+  <button class="fab" id="fabImport">+</button>
+</div>
+
+<!-- ── History screen ──────────────────── -->
+<div id="scHistory" class="screen">
+  <div class="hist-header"><h2>История</h2></div>
+  <div class="hist-list" id="histList"></div>
+</div>
+
+<!-- ── Bottom nav ──────────────────────── -->
+<nav class="bottom-nav">
+  <button class="tab active" id="tabGoals" onclick="switchTab('goals')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+    </svg>
+    Цели
+  </button>
+  <button class="tab" id="tabHistory" onclick="switchTab('history')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+    </svg>
+    История
+  </button>
+</nav>
+
+<!-- ── Import modal ────────────────────── -->
+<div class="overlay hidden" id="importOverlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h3>Импорт целей</h3>
+    <div class="hint-box">
+      Формат каждой строки:<br>
+      <code>ЧЧ:ММ | Предмет | Задача | приоритет</code><br>
+      Приоритет: <code>высокий</code> · <code>средний</code> · <code>низкий</code><br><br>
+      Пример:<br>
+      <code>09:00 | Математика | Задачи C1-C3 | высокий</code>
+    </div>
+    <textarea id="importTA" placeholder="09:00 | Математика | Задачи C1-C3 | высокий&#10;11:30 | Физика | Теория: кинематика | средний&#10;14:00 | Информатика | Сортировки | высокий"></textarea>
+    <div class="modal-btns">
+      <button class="btn btn-main" onclick="doImport()">Добавить</button>
+      <button class="btn btn-sec"  onclick="closeModal()">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Carry toast ─────────────────────── -->
+<div class="carry-toast hidden" id="carryToast" onclick="doCarry()">
+  ↪ Перенести на завтра
+</div>
+
+<script>
+// ── Telegram init ─────────────────────────
+const tg       = window.Telegram?.WebApp;
+const initData = tg?.initData || 'dev';
+
+if (tg) {
+  tg.expand();
+  tg.ready();
+}
+
+// ── Date utils ───────────────────────────
+const MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const DAYS   = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function parseDt(s) {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function shiftDate(s, delta) {
+  const d = parseDt(s);
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtDate(s) {
+  const d   = parseDt(s);
+  const tod = todayStr();
+  const yes = shiftDate(tod, -1);
+  const prefix = s === tod ? 'Сегодня · ' : s === yes ? 'Вчера · ' : '';
+  return {
+    main: `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
+    sub:  prefix + DAYS[d.getDay()]
+  };
+}
+
+function fmtDateShort(s) {
+  const d = parseDt(s);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+// ── API ───────────────────────────────────
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'x-init-data': initData },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── State ─────────────────────────────────
+let currentDate = todayStr();
+let currentTab  = 'goals';
+
+// ── Subject badge class ───────────────────
+function subjClass(s) {
+  const l = s.toLowerCase();
+  if (l.includes('матем'))  return 'b-mat';
+  if (l.includes('физик'))  return 'b-fiz';
+  if (l.includes('информ')) return 'b-inf';
+  if (l.includes('русск') || l.includes('рус.')) return 'b-rus';
+  return 'b-other';
+}
+
+// ── Goals screen ──────────────────────────
+async function loadGoals() {
+  try {
+    const goals = await api('GET', `/api/goals?date=${currentDate}`);
+    renderGoals(goals);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderGoals(goals) {
+  // Header
+  const { main, sub } = fmtDate(currentDate);
+  document.getElementById('dateMain').textContent = main;
+  document.getElementById('dateSub').textContent  = sub;
+  document.getElementById('nextDay').disabled     = currentDate >= todayStr();
+
+  // Progress
+  const done  = goals.filter(g => g.done).length;
+  const total = goals.length;
+  document.getElementById('progressNums').textContent = `${done} / ${total}`;
+  document.getElementById('progressFill').style.width = total ? `${done / total * 100}%` : '0%';
+
+  const wrap = document.getElementById('goalsWrap');
+  wrap.innerHTML = '';
+
+  if (!total) {
+    wrap.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📋</div>
+        <p>Нет целей на этот день.<br>Нажми + чтобы добавить.</p>
+      </div>`;
+    document.getElementById('carryToast').classList.add('hidden');
+    return;
+  }
+
+  const sorted = [...goals].sort((a, b) => a.time.localeCompare(b.time));
+  const active  = sorted.filter(g => !g.done);
+  const doneArr = sorted.filter(g =>  g.done);
+
+  active.forEach(g  => wrap.appendChild(makeCard(g)));
+
+  if (doneArr.length) {
+    const lbl = document.createElement('div');
+    lbl.className   = 'section-label';
+    lbl.textContent = 'Выполнено';
+    wrap.appendChild(lbl);
+    doneArr.forEach(g => wrap.appendChild(makeCard(g)));
+  }
+
+  // Carry toast — show only for past days with undone goals
+  const toast = document.getElementById('carryToast');
+  if (active.length && currentDate < todayStr()) {
+    toast.classList.remove('hidden');
+  } else {
+    toast.classList.add('hidden');
+  }
+}
+
+function makeCard(g) {
+  const div = document.createElement('div');
+  div.className = `goal-card p-${g.priority} ${g.done ? 'done' : ''}`;
+
+  const carried = g.carried_from
+    ? `<div class="carried-tag">↩ перенесено с ${fmtDateShort(g.carried_from)}</div>`
+    : '';
+
+  div.innerHTML = `
+    <div class="cb ${g.done ? 'checked' : ''}" onclick="toggle('${g.id}', ${!!g.done})">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="2,7 5,10 11,3"/>
+      </svg>
+    </div>
+    <div class="goal-body">
+      <div class="goal-task ${g.done ? 'done' : ''}">${g.task}</div>
+      <div class="goal-meta">
+        <span class="badge b-time">${g.time}</span>
+        <span class="badge ${subjClass(g.subject)}">${g.subject}</span>
+        <div class="prio-dot pd-${g.priority}"></div>
+      </div>
+      ${carried}
+    </div>
+    <button class="del-btn" onclick="del('${g.id}')">✕</button>`;
+
+  return div;
+}
+
+async function toggle(id, wasDone) {
+  try {
+    await api('PATCH', `/api/goals/${id}`, { done: !wasDone });
+    await loadGoals();
+  } catch(e) { console.error(e); }
+}
+
+async function del(id) {
+  try {
+    await api('DELETE', `/api/goals/${id}`);
+    await loadGoals();
+  } catch(e) { console.error(e); }
+}
+
+// ── Date nav ──────────────────────────────
+document.getElementById('prevDay').onclick = () => {
+  currentDate = shiftDate(currentDate, -1);
+  loadGoals();
+};
+document.getElementById('nextDay').onclick = () => {
+  if (currentDate >= todayStr()) return;
+  currentDate = shiftDate(currentDate, 1);
+  loadGoals();
+};
+
+// ── Import ────────────────────────────────
+document.getElementById('fabImport').onclick = () => {
+  document.getElementById('importTA').value = '';
+  document.getElementById('importOverlay').classList.remove('hidden');
+  setTimeout(() => document.getElementById('importTA').focus(), 100);
+};
+
+document.getElementById('importOverlay').onclick = e => {
+  if (e.target === document.getElementById('importOverlay')) closeModal();
+};
+
+function closeModal() {
+  document.getElementById('importOverlay').classList.add('hidden');
+}
+
+const PRIOS = ['высокий', 'средний', 'низкий'];
+
+function parseLine(line) {
+  const p = line.split('|').map(s => s.trim());
+  const time     = /^\d{1,2}:\d{2}$/.test(p[0]) ? p[0].padStart(5,'0') : '00:00';
+  const subject  = p[1] || 'Другое';
+  const task     = p[2] || line.trim();
+  const prioRaw  = (p[3] || '').toLowerCase().trim();
+  const priority = PRIOS.includes(prioRaw) ? prioRaw : 'средний';
+  return { time, subject, task, priority };
+}
+
+async function doImport() {
+  const text = document.getElementById('importTA').value.trim();
+  if (!text) return;
+
+  const goals = text.split('\n').map(l => l.trim()).filter(Boolean).map(parseLine);
+  try {
+    await api('POST', '/api/goals', { date: currentDate, goals });
+    closeModal();
+    await loadGoals();
+  } catch(e) { alert('Ошибка: ' + e.message); }
+}
+
+// ── Carry over ────────────────────────────
+async function doCarry() {
+  const toDate = shiftDate(currentDate, 1);
+  try {
+    await api('POST', '/api/carry', { fromDate: currentDate, toDate });
+    document.getElementById('carryToast').classList.add('hidden');
+    if (tg) tg.showAlert(`Перенесено на ${fmtDateShort(toDate)} ✓`);
+    else alert(`Перенесено на ${fmtDateShort(toDate)}`);
+    await loadGoals();
+  } catch(e) { console.error(e); }
+}
+
+// ── History screen ────────────────────────
+async function loadHistory() {
+  try {
+    const hist = await api('GET', '/api/history');
+    renderHistory(hist);
+  } catch(e) { console.error(e); }
+}
+
+function renderHistory(hist) {
+  const list = document.getElementById('histList');
+
+  if (!hist.length) {
+    list.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📅</div>
+        <p>История пока пуста.<br>Добавь первые цели.</p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = hist.map(h => {
+    const pct  = h.total ? Math.round(h.done / h.total * 100) : 0;
+    const full = pct === 100 ? 'full' : '';
+    const { main, sub } = fmtDate(h.date);
+    return `
+      <div class="hist-card" onclick="jumpToDate('${h.date}')">
+        <div class="hist-top">
+          <div>
+            <div class="hist-date">${main}</div>
+            <div class="hist-count" style="margin-top:2px">${sub}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="hist-pct">${pct}%</div>
+            <div class="hist-count">${h.done} / ${h.total}</div>
+          </div>
+        </div>
+        <div class="hist-bar">
+          <div class="hist-fill ${full}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function jumpToDate(date) {
+  currentDate = date;
+  switchTab('goals');
+  loadGoals();
+}
+
+// ── Tab switching ─────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('scGoals').classList.toggle('active',   tab === 'goals');
+  document.getElementById('scHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('tabGoals').classList.toggle('active',   tab === 'goals');
+  document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('fabImport').style.display = tab === 'goals' ? '' : 'none';
+  document.getElementById('carryToast').style.display = tab === 'goals' ? '' : 'none';
+
+  if (tab === 'history') loadHistory();
+}
+
+// ── Init ──────────────────────────────────
+loadGoals();
+</script>
+</body>
+</html>
