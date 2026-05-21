@@ -48,6 +48,19 @@ app.post('/webhook', async (req, res) => {
   const msg = req.body?.message;
   if (!msg?.text) return;
 
+  if (msg.text === '/myid') {
+    fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: msg.chat.id,
+        text: `Твой Telegram ID: \`${msg.from.id}\``,
+        parse_mode: 'Markdown'
+      })
+    });
+    return;
+  }
+
   if (msg.text === '/start') {
     fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
       method: 'POST',
@@ -95,6 +108,15 @@ app.post('/api/carry', auth, (req, res) => {
 
 app.get('/api/history', auth, (req, res) => {
   res.json(db.getHistory(req.user.id));
+});
+
+// ── Admin bulk import ────────────────────────────────────
+app.post('/api/admin/import', (req, res) => {
+  const { adminKey, userId, date, goals } = req.body;
+  if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  res.json(db.insertGoals(userId, date, goals));
 });
 
 // One-time setup endpoint — open in browser to register webhook
