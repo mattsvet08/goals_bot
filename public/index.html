@@ -539,7 +539,7 @@ function renderGoals(goals) {
   const { main, sub } = fmtDate(currentDate);
   document.getElementById('dateMain').textContent = main;
   document.getElementById('dateSub').textContent  = sub;
-  document.getElementById('nextDay').disabled     = currentDate >= todayStr();
+  document.getElementById('nextDay').disabled     = false;
 
   // Progress
   const done  = goals.filter(g => g.done).length;
@@ -631,7 +631,6 @@ document.getElementById('prevDay').onclick = () => {
   loadGoals();
 };
 document.getElementById('nextDay').onclick = () => {
-  if (currentDate >= todayStr()) return;
   currentDate = shiftDate(currentDate, 1);
   loadGoals();
 };
